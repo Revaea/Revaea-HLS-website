@@ -15,7 +15,26 @@ const inter = localFont({
 
 export const metadata: Metadata = {
   title: "WentUrc HLS 列表",
-  description: "不要过来",
+  description: "WentUrc 媒体列表服务",
+  robots: {
+    index: false,
+    follow: false,
+    noarchive: true,
+    noimageindex: true,
+    nosnippet: true,
+    notranslate: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noarchive: true,
+      noimageindex: true,
+      nosnippet: true,
+      notranslate: true,
+      'max-image-preview': 'none',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
+  },
   icons: {
     icon: [
       { url: "/logo.png", type: "image/png" },
@@ -35,6 +54,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate" />
       </head>
       <body className={`${inter.className} antialiased bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 min-h-screen`}>
         <BackgroundImage src="https://api.wenturc.com/" />
