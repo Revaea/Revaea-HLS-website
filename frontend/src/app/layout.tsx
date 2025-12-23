@@ -14,8 +14,8 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "WentUrc HLS 列表",
-  description: "WentUrc 媒体列表服务",
+  title: "Revaea HLS 列表",
+  description: "Revaea 媒体列表服务",
   robots: {
     index: false,
     follow: false,
@@ -57,7 +57,7 @@ export default function RootLayout({
         <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate" />
       </head>
       <body className={`${inter.className} antialiased bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 min-h-screen`}>
-        <BackgroundImage src="https://api.wenturc.com/" />
+        <BackgroundImage src="https://api.revaea.com/" />
         <div
           aria-hidden="true"
           className="pointer-events-none fixed inset-0 z-0 bg-gradient-to-b from-white via-white/40 to-white/0 dark:from-black dark:via-black/40 dark:to-black/0"

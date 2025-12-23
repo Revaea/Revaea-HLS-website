@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-6">
         <div className="border-t border-slate-200 dark:border-slate-700 pt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            © {new Date().getFullYear()} WentUrc. All rights reserved.
+            © {new Date().getFullYear()} Revaea. All rights reserved.
           </div>
           <div className="flex items-center gap-4">
             <Link
@@ -16,7 +16,7 @@ export default function Footer() {
               Home Page
             </Link>
             <a
-              href="https://wenturc.com"
+              href="https://revaea.com"
               target="_blank"
               rel="noreferrer"
               className="hover:text-slate-800 dark:hover:text-slate-200 transition-colors"

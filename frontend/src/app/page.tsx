@@ -5,7 +5,7 @@ export default function Page() {
   return (
     <div className="p-4 sm:p-6 space-y-4">
   <h1 className="text-4xl sm:text-5xl font-bold">
-    <span className="text-blue-600">WentUrc HLS </span>列表
+    <span className="text-blue-600">Revaea HLS </span>列表
   </h1>
   <p className="text-slate-600 dark:text-slate-300">管理上传文件、生成 HLS、预览播放列表</p>
   <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
