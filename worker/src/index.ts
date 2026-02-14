@@ -143,7 +143,12 @@ function parseRange(
   return { offset: start };
 }
 
-async function serveR2Object(env: Env, req: Request, key: string) {
+async function serveR2Object(
+  env: Env,
+  req: Request,
+  key: string,
+  ctx?: ExecutionContext,
+) {
   if (req.method === "HEAD") {
     const meta = await env.BUCKET.head(key);
     if (!meta) return new Response("Not Found", { status: 404 });
@@ -195,9 +200,9 @@ async function serveR2Object(env: Env, req: Request, key: string) {
   const resp = new Response(obj.body, { status: 200, headers });
   if (shouldEdgeCache(req, key)) {
     const cacheKey = new Request(req.url, { method: "GET" });
-    // Best-effort: avoid delaying the response on cache writes.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    caches.default.put(cacheKey, resp.clone());
+    const put = caches.default.put(cacheKey, resp.clone());
+    if (ctx) ctx.waitUntil(put);
+    else await put;
   }
   return resp;
 }
@@ -227,12 +232,12 @@ export default {
     }
 
     if (path === "/api/video/playlist" && isGetOrHead) {
-      const r = await serveR2Object(env, req, "video-playlist/playlist.json");
+      const r = await serveR2Object(env, req, "video-playlist/playlist.json", ctx);
       return applyCors(req, r, env);
     }
 
     if (path === "/api/music/playlist" && isGetOrHead) {
-      const r = await serveR2Object(env, req, "music-playlist/playlist.json");
+      const r = await serveR2Object(env, req, "music-playlist/playlist.json", ctx);
       return applyCors(req, r, env);
     }
 
@@ -252,13 +257,13 @@ export default {
 
     if (path.startsWith("/video-hls/") && isGetOrHead) {
       const key = safeDecodeKey(path.slice(1));
-      const r = await serveR2Object(env, req, key);
+      const r = await serveR2Object(env, req, key, ctx);
       return applyCors(req, r, env);
     }
 
     if (path.startsWith("/music-hls/") && isGetOrHead) {
       const key = safeDecodeKey(path.slice(1));
-      const r = await serveR2Object(env, req, key);
+      const r = await serveR2Object(env, req, key, ctx);
       return applyCors(req, r, env);
     }
 
