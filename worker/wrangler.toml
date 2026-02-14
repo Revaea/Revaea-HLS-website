@@ -9,6 +9,6 @@ bucket_name = "hls-playlist"
 [vars]
 # Comma-separated allow list.
 # Supports full origin (https://example.com), wildcard host (*.example.com or https://*.example.com), or bare host (example.com)
-CORS_ALLOW_ORIGINS = "https://example.com,https://*.example.com"
+CORS_ALLOW_ORIGINS = "https://revaea.com,https://www.revaea.com,https://*.revaea.com"
 # Allow localhost origins for development: 1/0
 ALLOW_LOCALHOST_CORS = "1"
