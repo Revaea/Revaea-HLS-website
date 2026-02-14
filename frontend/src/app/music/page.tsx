@@ -4,6 +4,7 @@ import Image from 'next/image'
 // import { HlsAudio } from '@/components/HlsPlayer'
 import { AudioPlayer, type PlayMode } from '@/components/ui/audio-player'
 import { getJSON, postJSON, openScanWS, toBackendUrl } from '@/lib/api'
+import { ENABLE_SCAN_UI } from '@/config'
 import { Button } from '@/components/ui/button'
 import { Window } from '@/components/ui/window'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -169,19 +170,21 @@ export default function MusicPage() {
     <div className="p-4 sm:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold flex items-center gap-2"><Music size={20}/> 音乐列表</h1>
-        <div className="flex flex-row flex-nowrap items-center gap-2 w-full sm:w-auto">
-          <Button onClick={scan} disabled={loading} variant={loading ? 'outline' : 'default'} className="whitespace-nowrap">
-            <RefreshCw className="mr-1" size={16} /> {loading ? '扫描中…' : '开始工作'}
-          </Button>
-          <Button
-            variant="outline"
-            className={`${hasLogs ? 'border-blue-400/60 text-blue-600 dark:border-blue-500/60 dark:text-blue-400 bg-blue-50/60 dark:bg-blue-900/20' : ''} whitespace-nowrap`}
-            onClick={() => setShowLogs(true)}
-          >
-            <History className="mr-1" size={16} />
-            <span>查看日志</span>
-          </Button>
-        </div>
+        {ENABLE_SCAN_UI && (
+          <div className="flex flex-row flex-nowrap items-center gap-2 w-full sm:w-auto">
+            <Button onClick={scan} disabled={loading} variant={loading ? 'outline' : 'default'} className="whitespace-nowrap">
+              <RefreshCw className="mr-1" size={16} /> {loading ? '扫描中…' : '开始工作'}
+            </Button>
+            <Button
+              variant="outline"
+              className={`${hasLogs ? 'border-blue-400/60 text-blue-600 dark:border-blue-500/60 dark:text-blue-400 bg-blue-50/60 dark:bg-blue-900/20' : ''} whitespace-nowrap`}
+              onClick={() => setShowLogs(true)}
+            >
+              <History className="mr-1" size={16} />
+              <span>查看日志</span>
+            </Button>
+          </div>
+        )}
       </div>
       <section>
         {listLoading ? (
@@ -324,7 +327,7 @@ export default function MusicPage() {
           </div>
         )}
       </section>
-      {showLogs && (
+      {ENABLE_SCAN_UI && showLogs && (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowLogs(false)} />
           <div className="absolute inset-0 grid place-items-center p-4">
