@@ -4,6 +4,14 @@ export interface Env {
   ALLOW_LOCALHOST_CORS?: string;
 }
 
+function shouldEdgeCache(req: Request, key: string): boolean {
+  if (req.method !== "GET") return false;
+  if (req.headers.has("Range")) return false;
+
+  const lower = key.toLowerCase();
+  return lower.endsWith(".ts") || lower.endsWith(".m4s");
+}
+
 function parseCorsAllowList(env: Env) {
   const raw =
     env.CORS_ALLOW_ORIGINS ??
@@ -150,6 +158,12 @@ async function serveR2Object(env: Env, req: Request, key: string) {
     return new Response(null, { status: 200, headers });
   }
 
+  if (shouldEdgeCache(req, key)) {
+    const cacheKey = new Request(req.url, { method: "GET" });
+    const hit = await caches.default.match(cacheKey);
+    if (hit) return hit;
+  }
+
   const range = parseRange(req.headers.get("Range"));
   const obj = await env.BUCKET.get(key, range ? { range } : undefined);
   if (!obj) return new Response("Not Found", { status: 404 });
@@ -177,7 +191,15 @@ async function serveR2Object(env: Env, req: Request, key: string) {
   }
 
   headers.set("Content-Length", String(obj.size));
-  return new Response(obj.body, { status: 200, headers });
+
+  const resp = new Response(obj.body, { status: 200, headers });
+  if (shouldEdgeCache(req, key)) {
+    const cacheKey = new Request(req.url, { method: "GET" });
+    // Best-effort: avoid delaying the response on cache writes.
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    caches.default.put(cacheKey, resp.clone());
+  }
+  return resp;
 }
 
 function safeDecodeKey(key: string): string {
@@ -189,7 +211,7 @@ function safeDecodeKey(key: string): string {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (req.method === "OPTIONS") {
       return applyCors(req, new Response(null, { status: 204 }), env);
     }
