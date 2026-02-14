@@ -1,36 +1,52 @@
-function resolveApiBase() {
-  const env = process.env.NEXT_PUBLIC_API_BASE
-  if (env && env.trim()) return env
-  if (typeof window !== 'undefined') return ''
-  return ''
+import { BACKEND_BASE as CONFIG_BACKEND_BASE } from '@/config'
+
+function normalizeBase(base: string) {
+  return base.trim().replace(/\/+$/, '')
 }
 
-export const API_BASE = resolveApiBase()
+export const BACKEND_BASE = normalizeBase(CONFIG_BACKEND_BASE || '')
+export const API_BASE = BACKEND_BASE
+
+export function toBackendUrl(pathOrUrl: string) {
+  const s = (pathOrUrl ?? '').trim()
+  if (!s) return s
+  if (/^https?:\/\//i.test(s)) return s
+  if (!BACKEND_BASE) return s
+  if (s.startsWith('/')) return BACKEND_BASE + s
+  return `${BACKEND_BASE}/${s}`
+}
 
 function resolveWsBase() {
-  const envWs = process.env.NEXT_PUBLIC_WS_BASE
-  if (envWs && envWs.trim()) return envWs
+  // Prefer explicit backend base when frontend and backend are on different origins.
+  if (BACKEND_BASE) {
+    return BACKEND_BASE.replace(/^http/, 'ws')
+  }
+
+  // Default: same-origin in browser.
   if (typeof window !== 'undefined') {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     return `${proto}://${window.location.host}`
   }
-  if (API_BASE) return API_BASE.replace(/^http/, 'ws')
+
+  // Server-side fallback (dev).
   return 'ws://127.0.0.1:8000'
 }
 
 export const WS_BASE = resolveWsBase()
 
 export async function getJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(API_BASE + url, init)
+  const full = toBackendUrl(url)
+  const res = await fetch(full, init)
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`GET ${url} failed: ${res.status} ${res.statusText} ${text}`)
+    throw new Error(`GET ${full || url} failed: ${res.status} ${res.statusText} ${text}`)
   }
   return res.json() as Promise<T>
 }
 
 export async function postJSON<T>(url: string, body?: unknown, init?: RequestInit): Promise<T> {
-  const res = await fetch(API_BASE + url, {
+  const full = toBackendUrl(url)
+  const res = await fetch(full, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -38,7 +54,7 @@ export async function postJSON<T>(url: string, body?: unknown, init?: RequestIni
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`POST ${url} failed: ${res.status} ${res.statusText} ${text}`)
+    throw new Error(`POST ${full || url} failed: ${res.status} ${res.statusText} ${text}`)
   }
   return res.json() as Promise<T>
 }

@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HlsVideo } from '@/components/HlsPlayer'
-import { getJSON, postJSON, openScanWS } from '@/lib/api'
+import { getJSON, postJSON, openScanWS, toBackendUrl } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Window } from '@/components/ui/window'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -219,7 +219,7 @@ export default function VideoPage() {
                     {selected.hlsUrl ? (
                       <div className={`relative w-full aspect-video overflow-hidden rounded-sm bg-black transition-all duration-500 ease-out ${videoReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
                         <HlsVideo
-                          src={selected.hlsUrl}
+                          src={toBackendUrl(selected.hlsUrl)}
                           className="absolute inset-0 w-full h-full block !m-0 object-contain object-center"
                           onCanPlay={() => setVideoReady(true)}
                         />

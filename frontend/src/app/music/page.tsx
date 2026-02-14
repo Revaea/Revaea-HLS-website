@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 // import { HlsAudio } from '@/components/HlsPlayer'
 import { AudioPlayer, type PlayMode } from '@/components/ui/audio-player'
-import { getJSON, postJSON, openScanWS } from '@/lib/api'
+import { getJSON, postJSON, openScanWS, toBackendUrl } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Window } from '@/components/ui/window'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -264,7 +264,7 @@ export default function MusicPage() {
                         <>
                           <div className="absolute inset-x-0 bottom-0 p-2 lg:hidden">
                             <AudioPlayer
-                              src={selected.hlsUrl}
+                              src={toBackendUrl(selected.hlsUrl)}
                               className="bg-transparent dark:bg-transparent border-0 shadow-none rounded-none"
                               onPrev={handlePrev}
                               onNext={handleNext}
@@ -275,7 +275,7 @@ export default function MusicPage() {
                           </div>
                           <div className="absolute inset-x-0 bottom-0 p-2 hidden lg:block">
                             <AudioPlayer
-                              src={selected.hlsUrl}
+                              src={toBackendUrl(selected.hlsUrl)}
                               className="bg-transparent dark:bg-transparent border-0 shadow-none rounded-none"
                               onPrev={handlePrev}
                               onNext={handleNext}

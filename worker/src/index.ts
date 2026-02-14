@@ -1,7 +1,17 @@
 export interface Env {
   BUCKET: R2Bucket;
+  ASSETS: Fetcher;
   CORS_ALLOW_ORIGINS?: string;
   ALLOW_LOCALHOST_CORS?: string;
+}
+
+function rewriteToExportedHtmlPath(pathname: string): string | null {
+  // Next.js export (output: export) commonly emits route HTML as top-level *.html
+  // e.g. /music -> /music.html, /video -> /video.html
+  if (pathname === "/") return "/index.html";
+  if (pathname === "/music" || pathname === "/music/") return "/music.html";
+  if (pathname === "/video" || pathname === "/video/") return "/video.html";
+  return null;
 }
 
 function shouldEdgeCache(req: Request, key: string): boolean {
@@ -267,6 +277,24 @@ export default {
       return applyCors(req, r, env);
     }
 
-    return applyCors(req, new Response("Not Found", { status: 404 }), env);
+    // Static frontend: fall back to Workers Assets.
+    // We intentionally do NOT apply CORS headers here.
+    const rewritten = rewriteToExportedHtmlPath(path);
+    if (rewritten) {
+      const u = new URL(req.url);
+      u.pathname = rewritten;
+      return env.ASSETS.fetch(new Request(u.toString(), req));
+    }
+
+    const assetResp = await env.ASSETS.fetch(req);
+    if (assetResp.status !== 404) return assetResp;
+
+    // Friendly 404: try serving exported 404.html if present.
+    const u404 = new URL(req.url);
+    u404.pathname = "/404.html";
+    const html404 = await env.ASSETS.fetch(new Request(u404.toString(), req));
+    if (html404.status !== 404) return new Response(html404.body, { status: 404, headers: html404.headers });
+
+    return new Response("Not Found", { status: 404 });
   },
 };

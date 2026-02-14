@@ -2,6 +2,9 @@ name = "hls"
 main = "src/index.ts"
 compatibility_date = "2026-02-14"
 
+# Serve the exported Next.js site from ../assets via Workers Static Assets.
+assets = { directory = "../assets", binding = "ASSETS" }
+
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "hls-playlist"
