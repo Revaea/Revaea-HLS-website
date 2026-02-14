@@ -1,6 +1,5 @@
 *.conf
 *.zip
-*.json
 *.m3u8
 *.pyc
 /video-hls
