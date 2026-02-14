@@ -2,6 +2,15 @@ name = "hls"
 main = "src/index.ts"
 compatibility_date = "2026-02-14"
 
+# Bind this worker to your custom domain route.
+routes = [
+	{ pattern = "hls.revaea.com/*", zone_name = "revaea.com" }
+]
+
+# Use the custom domain route instead of workers.dev.
+workers_dev = false
+preview_urls = false
+
 # Serve the exported Next.js site from ../assets via Workers Static Assets.
 assets = { directory = "../assets", binding = "ASSETS" }
 
