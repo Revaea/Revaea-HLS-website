@@ -180,6 +180,14 @@ async function serveR2Object(env: Env, req: Request, key: string) {
   return new Response(obj.body, { status: 200, headers });
 }
 
+function safeDecodeKey(key: string): string {
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    return key;
+  }
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     if (req.method === "OPTIONS") {
@@ -221,13 +229,13 @@ export default {
     }
 
     if (path.startsWith("/video-hls/") && isGetOrHead) {
-      const key = path.slice(1);
+      const key = safeDecodeKey(path.slice(1));
       const r = await serveR2Object(env, req, key);
       return applyCors(req, r, env);
     }
 
     if (path.startsWith("/music-hls/") && isGetOrHead) {
-      const key = path.slice(1);
+      const key = safeDecodeKey(path.slice(1));
       const r = await serveR2Object(env, req, key);
       return applyCors(req, r, env);
     }
