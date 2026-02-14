@@ -85,7 +85,7 @@ function applyCors(req: Request, resp: Response, env: Env) {
     resp.headers.set("Vary", "Origin");
   }
 
-  resp.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  resp.headers.set("Access-Control-Allow-Methods", "GET,HEAD,POST,OPTIONS");
   resp.headers.set(
     "Access-Control-Allow-Headers",
     req.headers.get("Access-Control-Request-Headers") ?? "Content-Type, Range",
@@ -136,6 +136,20 @@ function parseRange(
 }
 
 async function serveR2Object(env: Env, req: Request, key: string) {
+  if (req.method === "HEAD") {
+    const meta = await env.BUCKET.head(key);
+    if (!meta) return new Response("Not Found", { status: 404 });
+
+    const headers = new Headers();
+    const ct = contentTypeForKey(key);
+    if (ct) headers.set("Content-Type", ct);
+    headers.set("Cache-Control", cacheControlForKey(key));
+    headers.set("Accept-Ranges", "bytes");
+    if (meta.httpEtag) headers.set("ETag", meta.httpEtag);
+    headers.set("Content-Length", String(meta.size));
+    return new Response(null, { status: 200, headers });
+  }
+
   const range = parseRange(req.headers.get("Range"));
   const obj = await env.BUCKET.get(key, range ? { range } : undefined);
   if (!obj) return new Response("Not Found", { status: 404 });
@@ -172,19 +186,22 @@ export default {
       return applyCors(req, new Response(null, { status: 204 }), env);
     }
 
+    const method = req.method;
+    const isGetOrHead = method === "GET" || method === "HEAD";
+
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (path === "/api/health" && req.method === "GET") {
+    if (path === "/api/health" && isGetOrHead) {
       return applyCors(req, json({ status: "ok" }), env);
     }
 
-    if (path === "/api/video/playlist" && req.method === "GET") {
+    if (path === "/api/video/playlist" && isGetOrHead) {
       const r = await serveR2Object(env, req, "video-playlist/playlist.json");
       return applyCors(req, r, env);
     }
 
-    if (path === "/api/music/playlist" && req.method === "GET") {
+    if (path === "/api/music/playlist" && isGetOrHead) {
       const r = await serveR2Object(env, req, "music-playlist/playlist.json");
       return applyCors(req, r, env);
     }
@@ -203,13 +220,13 @@ export default {
       );
     }
 
-    if (path.startsWith("/video-hls/") && req.method === "GET") {
+    if (path.startsWith("/video-hls/") && isGetOrHead) {
       const key = path.slice(1);
       const r = await serveR2Object(env, req, key);
       return applyCors(req, r, env);
     }
 
-    if (path.startsWith("/music-hls/") && req.method === "GET") {
+    if (path.startsWith("/music-hls/") && isGetOrHead) {
       const key = path.slice(1);
       const r = await serveR2Object(env, req, key);
       return applyCors(req, r, env);
