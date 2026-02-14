@@ -7,7 +7,7 @@ export interface Env {
 function parseCorsAllowList(env: Env) {
   const raw =
     env.CORS_ALLOW_ORIGINS ??
-    "https://*.igcrystal.icu,https://*.revaea.com";
+    "https://*.igcrystal.icu,https://*.revaea.com,https://www.revaea.com,https://revaea.com,https://igcrystal.icu,https://www.igcrystal.icu";
 
   const items = raw
     .split(",")
