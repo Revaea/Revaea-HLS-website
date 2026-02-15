@@ -28,3 +28,8 @@ bucket_name = "hls-playlist"
 CORS_ALLOW_ORIGINS = "https://revaea.com,https://www.revaea.com,https://*.revaea.com"
 # Allow localhost origins for development: 1/0
 ALLOW_LOCALHOST_CORS = "1"
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
