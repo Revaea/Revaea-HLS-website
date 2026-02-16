@@ -38,13 +38,17 @@ function parseCorsAllowList(env: Env) {
 
   for (const item of items) {
     if (item.includes("://")) {
+      // Support patterns like "https://*.example.com" which are not valid URLs.
+      const wildcardSchemeMatch = item.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\*\.(.+)$/);
+      if (wildcardSchemeMatch) {
+        allowedHostSuffixes.add("." + wildcardSchemeMatch[1]);
+        continue;
+      }
+
       try {
         const u = new URL(item);
-        const host = u.host;
-        if (host.startsWith("*.")) allowedHostSuffixes.add(host.slice(1));
-        else allowedExactOrigins.add(item);
+        allowedExactOrigins.add(u.origin);
       } catch {
-        // ignore
       }
     } else {
       if (item.startsWith("*.")) allowedHostSuffixes.add(item.slice(1));
@@ -78,14 +82,17 @@ function isOriginAllowed(origin: string | null, env: Env) {
   const { allowedExactOrigins, allowedExactHosts, allowedHostSuffixes } =
     parseCorsAllowList(env);
 
-  if (allowedExactOrigins.has(origin)) return true;
-
-  let host: string;
+  let originUrl: URL;
   try {
-    host = new URL(origin).host;
+    originUrl = new URL(origin);
   } catch {
     return false;
   }
+
+  if (allowedExactOrigins.has(originUrl.origin)) return true;
+
+  let host: string;
+  host = originUrl.host;
 
   if (allowedExactHosts.has(host)) return true;
 
@@ -96,13 +103,40 @@ function isOriginAllowed(origin: string | null, env: Env) {
   return false;
 }
 
-function applyCors(req: Request, resp: Response, env: Env) {
+type CorsMode = "allowlist" | "reflect";
+
+function appendVary(headers: Headers, value: string) {
+  const existing = headers.get("Vary");
+  if (!existing) {
+    headers.set("Vary", value);
+    return;
+  }
+  if (existing.trim() === "*") return;
+
+  const want = value.toLowerCase();
+  const parts = existing
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (parts.includes(want)) return;
+  headers.set("Vary", `${existing}, ${value}`);
+}
+
+function applyCors(
+  req: Request,
+  resp: Response,
+  env: Env,
+  mode: CorsMode = "allowlist",
+) {
   const headers = new Headers(resp.headers);
 
   const origin = req.headers.get("Origin");
-  if (isOriginAllowed(origin, env)) {
-    headers.set("Access-Control-Allow-Origin", origin!);
-    headers.set("Vary", "Origin");
+  if (origin) {
+    const allowed = mode === "reflect" ? true : isOriginAllowed(origin, env);
+    if (allowed) {
+      headers.set("Access-Control-Allow-Origin", origin);
+      appendVary(headers, "Origin");
+    }
   }
 
   headers.set("Access-Control-Allow-Methods", "GET,HEAD,POST,OPTIONS");
@@ -110,6 +144,13 @@ function applyCors(req: Request, resp: Response, env: Env) {
     "Access-Control-Allow-Headers",
     req.headers.get("Access-Control-Request-Headers") ?? "Content-Type, Range",
   );
+  headers.set(
+    "Access-Control-Expose-Headers",
+    "Accept-Ranges, Content-Length, Content-Range, ETag",
+  );
+  if (req.method === "OPTIONS") {
+    headers.set("Access-Control-Max-Age", "86400");
+  }
 
   return new Response(resp.body, {
     status: resp.status,
@@ -243,7 +284,11 @@ export default {
 
     try {
       if (req.method === "OPTIONS") {
-        return applyCors(req, new Response(null, { status: 204 }), env);
+        const mode: CorsMode =
+          path.startsWith("/music-hls/") || path.startsWith("/video-hls/")
+            ? "allowlist"
+            : "allowlist";
+        return applyCors(req, new Response(null, { status: 204 }), env, mode);
       }
 
       const method = req.method;
@@ -290,13 +335,13 @@ export default {
       if (path.startsWith("/video-hls/") && isGetOrHead) {
         const key = safeDecodeKey(path.slice(1));
         const r = await serveR2Object(env, req, key, ctx);
-        return applyCors(req, r, env);
+        return applyCors(req, r, env, "allowlist");
       }
 
       if (path.startsWith("/music-hls/") && isGetOrHead) {
         const key = safeDecodeKey(path.slice(1));
         const r = await serveR2Object(env, req, key, ctx);
-        return applyCors(req, r, env);
+        return applyCors(req, r, env, "allowlist");
       }
 
       // Static frontend: fall back to Workers Assets.
