@@ -227,74 +227,98 @@ function safeDecodeKey(key: string): string {
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (req.method === "OPTIONS") {
-      return applyCors(req, new Response(null, { status: 204 }), env);
-    }
-
-    const method = req.method;
-    const isGetOrHead = method === "GET" || method === "HEAD";
-
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (path === "/api/health" && isGetOrHead) {
-      return applyCors(req, json({ status: "ok" }), env);
+    const wantsCors =
+      path.startsWith("/api/") ||
+      path.startsWith("/music-hls/") ||
+      path.startsWith("/video-hls/");
+
+    try {
+      if (req.method === "OPTIONS") {
+        return applyCors(req, new Response(null, { status: 204 }), env);
+      }
+
+      const method = req.method;
+      const isGetOrHead = method === "GET" || method === "HEAD";
+
+      if (path === "/api/health" && isGetOrHead) {
+        return applyCors(req, json({ status: "ok" }), env);
+      }
+
+      if (path === "/api/video/playlist" && isGetOrHead) {
+        const r = await serveR2Object(
+          env,
+          req,
+          "video-playlist/playlist.json",
+          ctx,
+        );
+        return applyCors(req, r, env);
+      }
+
+      if (path === "/api/music/playlist" && isGetOrHead) {
+        const r = await serveR2Object(
+          env,
+          req,
+          "music-playlist/playlist.json",
+          ctx,
+        );
+        return applyCors(req, r, env);
+      }
+
+      if (
+        (path === "/api/scan/video" || path === "/api/scan/music") &&
+        req.method === "POST"
+      ) {
+        return applyCors(
+          req,
+          json(
+            { error: "scan is not available in worker-only mode" },
+            { status: 501 },
+          ),
+          env,
+        );
+      }
+
+      if (path.startsWith("/video-hls/") && isGetOrHead) {
+        const key = safeDecodeKey(path.slice(1));
+        const r = await serveR2Object(env, req, key, ctx);
+        return applyCors(req, r, env);
+      }
+
+      if (path.startsWith("/music-hls/") && isGetOrHead) {
+        const key = safeDecodeKey(path.slice(1));
+        const r = await serveR2Object(env, req, key, ctx);
+        return applyCors(req, r, env);
+      }
+
+      // Static frontend: fall back to Workers Assets.
+      // We intentionally do NOT apply CORS headers here.
+      const rewritten = rewriteToExportedHtmlPath(path);
+      if (rewritten) {
+        const u = new URL(req.url);
+        u.pathname = rewritten;
+        return env.ASSETS.fetch(new Request(u.toString(), req));
+      }
+
+      const assetResp = await env.ASSETS.fetch(req);
+      if (assetResp.status !== 404) return assetResp;
+
+      // Friendly 404: try serving exported 404.html if present.
+      const u404 = new URL(req.url);
+      u404.pathname = "/404.html";
+      const html404 = await env.ASSETS.fetch(new Request(u404.toString(), req));
+      if (html404.status !== 404)
+        return new Response(html404.body, {
+          status: 404,
+          headers: html404.headers,
+        });
+
+      return new Response("Not Found", { status: 404 });
+    } catch {
+      const resp = new Response("Internal Server Error", { status: 500 });
+      return wantsCors ? applyCors(req, resp, env) : resp;
     }
-
-    if (path === "/api/video/playlist" && isGetOrHead) {
-      const r = await serveR2Object(env, req, "video-playlist/playlist.json", ctx);
-      return applyCors(req, r, env);
-    }
-
-    if (path === "/api/music/playlist" && isGetOrHead) {
-      const r = await serveR2Object(env, req, "music-playlist/playlist.json", ctx);
-      return applyCors(req, r, env);
-    }
-
-    if (
-      (path === "/api/scan/video" || path === "/api/scan/music") &&
-      req.method === "POST"
-    ) {
-      return applyCors(
-        req,
-        json(
-          { error: "scan is not available in worker-only mode" },
-          { status: 501 },
-        ),
-        env,
-      );
-    }
-
-    if (path.startsWith("/video-hls/") && isGetOrHead) {
-      const key = safeDecodeKey(path.slice(1));
-      const r = await serveR2Object(env, req, key, ctx);
-      return applyCors(req, r, env);
-    }
-
-    if (path.startsWith("/music-hls/") && isGetOrHead) {
-      const key = safeDecodeKey(path.slice(1));
-      const r = await serveR2Object(env, req, key, ctx);
-      return applyCors(req, r, env);
-    }
-
-    // Static frontend: fall back to Workers Assets.
-    // We intentionally do NOT apply CORS headers here.
-    const rewritten = rewriteToExportedHtmlPath(path);
-    if (rewritten) {
-      const u = new URL(req.url);
-      u.pathname = rewritten;
-      return env.ASSETS.fetch(new Request(u.toString(), req));
-    }
-
-    const assetResp = await env.ASSETS.fetch(req);
-    if (assetResp.status !== 404) return assetResp;
-
-    // Friendly 404: try serving exported 404.html if present.
-    const u404 = new URL(req.url);
-    u404.pathname = "/404.html";
-    const html404 = await env.ASSETS.fetch(new Request(u404.toString(), req));
-    if (html404.status !== 404) return new Response(html404.body, { status: 404, headers: html404.headers });
-
-    return new Response("Not Found", { status: 404 });
   },
 };
