@@ -97,19 +97,25 @@ function isOriginAllowed(origin: string | null, env: Env) {
 }
 
 function applyCors(req: Request, resp: Response, env: Env) {
+  const headers = new Headers(resp.headers);
+
   const origin = req.headers.get("Origin");
   if (isOriginAllowed(origin, env)) {
-    resp.headers.set("Access-Control-Allow-Origin", origin!);
-    resp.headers.set("Vary", "Origin");
+    headers.set("Access-Control-Allow-Origin", origin!);
+    headers.set("Vary", "Origin");
   }
 
-  resp.headers.set("Access-Control-Allow-Methods", "GET,HEAD,POST,OPTIONS");
-  resp.headers.set(
+  headers.set("Access-Control-Allow-Methods", "GET,HEAD,POST,OPTIONS");
+  headers.set(
     "Access-Control-Allow-Headers",
     req.headers.get("Access-Control-Request-Headers") ?? "Content-Type, Range",
   );
 
-  return resp;
+  return new Response(resp.body, {
+    status: resp.status,
+    statusText: resp.statusText,
+    headers,
+  });
 }
 
 function json(data: unknown, init: ResponseInit = {}) {
