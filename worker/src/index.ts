@@ -5,6 +5,44 @@ export interface Env {
   ALLOW_LOCALHOST_CORS?: string;
 }
 
+function stripConditionalAndRangeHeaders(headers: Headers) {
+  headers.delete("Range");
+  headers.delete("If-None-Match");
+  headers.delete("If-Modified-Since");
+  headers.delete("If-Match");
+  headers.delete("If-Unmodified-Since");
+  headers.delete("If-Range");
+}
+
+async function fetchExported404Page(
+  req: Request,
+  env: Env,
+): Promise<Response | null> {
+  const candidates = ["/404.html", "/_not-found.html"];
+  const method = req.method === "HEAD" ? "HEAD" : "GET";
+
+  for (const pathname of candidates) {
+    const u = new URL(req.url);
+    u.pathname = pathname;
+    u.search = "";
+
+    const headers = new Headers(req.headers);
+    stripConditionalAndRangeHeaders(headers);
+
+    const r = await env.ASSETS.fetch(
+      new Request(u.toString(), {
+        method,
+        headers,
+      }),
+    );
+
+    if (r.status === 404) continue;
+    if (r.status >= 200 && r.status < 400) return r;
+  }
+
+  return null;
+}
+
 function rewriteToExportedHtmlPath(pathname: string): string | null {
   // Next.js export (output: export) commonly emits route HTML as top-level *.html
   // e.g. /music -> /music.html, /video -> /video.html
@@ -356,12 +394,9 @@ export default {
       const assetResp = await env.ASSETS.fetch(req);
       if (assetResp.status !== 404) return assetResp;
 
-      // Friendly 404: try serving exported 404.html if present.
-      const u404 = new URL(req.url);
-      u404.pathname = "/404.html";
-      const html404 = await env.ASSETS.fetch(new Request(u404.toString(), req));
-      if (html404.status !== 404)
-        return new Response(html404.body, {
+      const html404 = await fetchExported404Page(req, env);
+      if (html404)
+        return new Response(req.method === "HEAD" ? null : html404.body, {
           status: 404,
           headers: html404.headers,
         });
