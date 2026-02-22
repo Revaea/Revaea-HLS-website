@@ -1,18 +1,15 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextPluginImport from "@next/eslint-plugin-next";
+import tsPluginImport from "@typescript-eslint/eslint-plugin";
+import tsParserImport from "@typescript-eslint/parser";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const nextPlugin = nextPluginImport.default ?? nextPluginImport;
+const tsPlugin = tsPluginImport.default ?? tsPluginImport;
+const tsParser = tsParserImport.default ?? tsParserImport;
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+export default [
   {
     ignores: [
+      "assets/**",
       "node_modules/**",
       ".next/**",
       "out/**",
@@ -20,6 +17,20 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  nextPlugin.configs["core-web-vitals"],
+  {
+    files: ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+    languageOptions: {
+      parser: tsParser,
+      sourceType: "module",
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+    },
+    rules: {
+      ...(tsPlugin.configs?.recommended?.rules ?? {}),
+      "@typescript-eslint/no-unused-vars": 1,
+      "@typescript-eslint/no-unused-expressions": 1,
+    },
+  },
 ];
-
-export default eslintConfig;
