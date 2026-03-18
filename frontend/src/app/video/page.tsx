@@ -1,11 +1,12 @@
 "use client"
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HlsVideo } from '@/components/HlsPlayer'
-import { getJSON, postJSON, openScanWS, toBackendUrl } from '@/lib/api'
+import { getJSON, postJSON, openScanWS, toBackendUrl, getScanAuthHeaders } from '@/lib/api'
 import { ENABLE_SCAN_UI } from '@/config'
 import { Button } from '@/components/ui/button'
 import { Window } from '@/components/ui/window'
 import { Skeleton } from '@/components/ui/skeleton'
+import ScanTokenInput from '@/components/ScanTokenInput'
 import { Play, RefreshCw, History, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -115,7 +116,7 @@ export default function VideoPage() {
       })
     } catch {
       try {
-        const data = await postJSON<{ logs?: string[]; result?: unknown }>('/api/scan/video')
+        const data = await postJSON<{ logs?: string[]; result?: unknown }>('/api/scan/video', undefined, { headers: getScanAuthHeaders() })
         setLogs(data.logs || [])
         await load()
         toast.success('视频扫描完成')
@@ -155,6 +156,7 @@ export default function VideoPage() {
           </div>
         )}
       </div>
+      {ENABLE_SCAN_UI && <ScanTokenInput />}
       <section>
         {listLoading ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">

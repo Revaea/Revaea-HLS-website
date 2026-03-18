@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend (Next.js)
 
-## Getting Started
+本目录是站点前端（静态导出模式）。
 
-First, run the development server:
+## 开发
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+默认开发地址：`http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 构建（静态导出）
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm build
+```
 
-## Learn More
+说明：
 
-To learn more about Next.js, take a look at the following resources:
+- `output: 'export'`
+- `distDir: 'assets'`
+- `postbuild` 会调用仓库根 `scripts/collect_frontend_export.js`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 关键配置
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+文件：`src/config.ts`
 
-## Deploy on Vercel
+- `BACKEND_BASE`：后端基础地址
+	- 同域部署可设为 `''`
+	- 跨域部署填写完整域名
+- `ENABLE_SCAN_UI`：扫描相关 UI 开关
+	- `false`：Worker-only 模式（不显示扫描按钮/日志/Token 输入）
+	- `true`：Python 后端模式（显示扫描按钮/日志/Token 输入）
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 扫描 Token（仅 `ENABLE_SCAN_UI=true`）
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/video` 与 `/music` 页面会出现 Token 输入框
+- 保存后写入浏览器 `localStorage`
+- 扫描请求会自动携带 token（HTTP Bearer + WS query）
+

@@ -34,7 +34,7 @@ async function main() {
   const destBase = path.join(root, 'assets');
 
   if (!(await exists(outDir))) {
-    console.error(`[collect-export] not found: ${outDir}. Did you run "npm run build" in frontend?`);
+    console.error(`[collect-export] not found: ${outDir}. Did you run "pnpm run build" in frontend?`);
     process.exit(1);
   }
 

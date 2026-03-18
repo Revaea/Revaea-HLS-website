@@ -3,11 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 // import { HlsAudio } from '@/components/HlsPlayer'
 import { AudioPlayer, type PlayMode } from '@/components/ui/audio-player'
-import { getJSON, postJSON, openScanWS, toBackendUrl } from '@/lib/api'
+import { getJSON, postJSON, openScanWS, toBackendUrl, getScanAuthHeaders } from '@/lib/api'
 import { ENABLE_SCAN_UI } from '@/config'
 import { Button } from '@/components/ui/button'
 import { Window } from '@/components/ui/window'
 import { Skeleton } from '@/components/ui/skeleton'
+import ScanTokenInput from '@/components/ScanTokenInput'
 import { Music, RefreshCw, History, X, Repeat, Repeat1, Shuffle } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -146,7 +147,7 @@ export default function MusicPage() {
     } catch {
 
       try {
-        const data = await postJSON<{ logs?: string[]; result?: unknown }>('/api/scan/music')
+        const data = await postJSON<{ logs?: string[]; result?: unknown }>('/api/scan/music', undefined, { headers: getScanAuthHeaders() })
         setLogs(data.logs || [])
         await load()
         toast.success('音乐扫描完成')
@@ -186,6 +187,7 @@ export default function MusicPage() {
           </div>
         )}
       </div>
+      {ENABLE_SCAN_UI && <ScanTokenInput />}
       <section>
         {listLoading ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">

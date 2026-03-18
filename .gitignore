@@ -12,3 +12,5 @@
 frontend/assets
 assets
 /worker/node_modules
+.env
+/.secrets

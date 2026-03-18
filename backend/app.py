@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from quart import Quart, send_from_directory, websocket, request
 import os
-from urllib.parse import urlparse
+import hmac
+from urllib.parse import parse_qs, urlparse
 import time
 
 
@@ -78,12 +79,53 @@ def create_app() -> Quart:
         debounce_sec = 10
     app.config['SCAN_DEBOUNCE_SECONDS'] = debounce_sec
 
+    def _extract_bearer_token(auth_header: str | None) -> str | None:
+        if not auth_header:
+            return None
+        prefix = 'Bearer '
+        if auth_header.startswith(prefix):
+            token = auth_header[len(prefix):].strip()
+            return token or None
+        return None
+
+    def _extract_scan_token_from_websocket() -> str | None:
+        token = _extract_bearer_token(websocket.headers.get('Authorization'))
+        if token:
+            return token
+        token = (websocket.headers.get('X-Scan-Token') or '').strip()
+        if token:
+            return token
+        raw_qs = getattr(websocket, 'query_string', b'')
+        if isinstance(raw_qs, bytes):
+            query = raw_qs.decode(errors='ignore')
+        else:
+            query = str(raw_qs or '')
+        try:
+            parsed = parse_qs(query)
+            token = ((parsed.get('token') or [''])[0] or '').strip()
+            return token or None
+        except Exception:
+            return None
+
     async def _stream_scan(kind: str):
         lock = app.scan_locks[kind]
         cfg2 = app.config['APP_CONFIG']
         now = time.time()
         last = app.scan_last.get(kind, 0.0)
         debounce = app.config.get('SCAN_DEBOUNCE_SECONDS', 10)
+
+        if cfg2.SCAN_AUTH_REQUIRED:
+            if not cfg2.SCAN_API_TOKEN:
+                try:
+                    await websocket.send(_json.dumps({'type': 'error', 'message': 'scan auth is enabled but SCAN_API_TOKEN is not configured'}))
+                finally:
+                    return
+            provided = _extract_scan_token_from_websocket()
+            if not provided or not hmac.compare_digest(provided, cfg2.SCAN_API_TOKEN):
+                try:
+                    await websocket.send(_json.dumps({'type': 'error', 'message': 'unauthorized'}))
+                finally:
+                    return
 
         # 若已在运行，直接提示忙碌
         if lock.locked():

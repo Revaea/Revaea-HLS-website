@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
@@ -30,6 +31,10 @@ class Config:
     STRATEGY: str = "auto"  # auto|copy|transcode
     FORCE_REENCODE: bool = False
     VERBOSE: bool = True
+
+    # Scan management endpoint auth (recommended for production)
+    SCAN_AUTH_REQUIRED: bool = True
+    SCAN_API_TOKEN: str = ""
 
     # Frontend (static export) settings
     FRONTEND_ENABLE: bool = True
@@ -70,6 +75,38 @@ class Config:
         cfg.STRATEGY = os.getenv("STRATEGY", cfg.STRATEGY).lower()
         cfg.FORCE_REENCODE = os.getenv("FORCE_REENCODE", "0") in ("1", "true", "True")
         cfg.VERBOSE = os.getenv("VERBOSE", "1") not in ("0", "false", "False")
+        cfg.SCAN_AUTH_REQUIRED = os.getenv("SCAN_AUTH_REQUIRED", "1") not in ("0", "false", "False")
+        cfg.SCAN_API_TOKEN = (os.getenv("SCAN_API_TOKEN") or "").strip()
+
+        # Auto-discover token file at repo default path to avoid extra env config.
+        # Compatibility: SCAN_API_TOKEN_FILE can still override the file path when needed.
+        token_file_raw = os.getenv("SCAN_API_TOKEN_FILE")
+        token_file = Path(token_file_raw) if token_file_raw else (root / ".secrets" / "scan_api_token")
+        if cfg.SCAN_AUTH_REQUIRED:
+            if token_file.exists():
+                try:
+                    file_token = token_file.read_text(encoding="utf-8").strip()
+                except Exception as e:
+                    raise RuntimeError(f"failed to read scan token file: {token_file}") from e
+                if file_token:
+                    # Prefer persisted file token for stable behavior across restarts.
+                    cfg.SCAN_API_TOKEN = file_token
+                else:
+                    token_to_write = cfg.SCAN_API_TOKEN or secrets.token_urlsafe(32)
+                    try:
+                        token_file.parent.mkdir(parents=True, exist_ok=True)
+                        token_file.write_text(token_to_write, encoding="utf-8")
+                    except Exception as e:
+                        raise RuntimeError(f"failed to write scan token file: {token_file}") from e
+                    cfg.SCAN_API_TOKEN = token_to_write
+            else:
+                token_to_write = cfg.SCAN_API_TOKEN or secrets.token_urlsafe(32)
+                try:
+                    token_file.parent.mkdir(parents=True, exist_ok=True)
+                    token_file.write_text(token_to_write, encoding="utf-8")
+                except Exception as e:
+                    raise RuntimeError(f"failed to create scan token file: {token_file}") from e
+                cfg.SCAN_API_TOKEN = token_to_write
 
         # Frontend settings (static site)
         cfg.FRONTEND_ENABLE = os.getenv("FRONTEND_ENABLE", "1") not in ("0", "false", "False")

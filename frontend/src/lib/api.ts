@@ -1,5 +1,7 @@
 import { BACKEND_BASE as CONFIG_BACKEND_BASE } from '@/config'
 
+const SCAN_TOKEN_STORAGE_KEY = 'scan_api_token'
+
 function normalizeBase(base: string) {
   return base.trim().replace(/\/+$/, '')
 }
@@ -34,6 +36,49 @@ function resolveWsBase() {
 
 export const WS_BASE = resolveWsBase()
 
+export function getScanToken(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return (window.localStorage.getItem(SCAN_TOKEN_STORAGE_KEY) || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+export function setScanToken(token: string) {
+  if (typeof window === 'undefined') return
+  try {
+    const v = token.trim()
+    if (!v) {
+      window.localStorage.removeItem(SCAN_TOKEN_STORAGE_KEY)
+      return
+    }
+    window.localStorage.setItem(SCAN_TOKEN_STORAGE_KEY, v)
+  } catch {
+  }
+}
+
+export function clearScanToken() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(SCAN_TOKEN_STORAGE_KEY)
+  } catch {
+  }
+}
+
+export function getScanAuthHeaders(): HeadersInit {
+  const token = getScanToken()
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
+}
+
+function withTokenQuery(path: string): string {
+  const token = getScanToken()
+  if (!token) return path
+  const sep = path.includes('?') ? '&' : '?'
+  return `${path}${sep}token=${encodeURIComponent(token)}`
+}
+
 export async function getJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const full = toBackendUrl(url)
   const res = await fetch(full, init)
@@ -65,7 +110,7 @@ export function openScanWS(path: '/ws/scan/video' | '/ws/scan/music', handlers: 
   onError?: (message: string) => void
   onClose?: () => void
 }) {
-  const ws = new WebSocket((WS_BASE || '') + path)
+  const ws = new WebSocket((WS_BASE || '') + withTokenQuery(path))
   ws.onmessage = (ev) => {
     try {
       const data = JSON.parse(ev.data as string) as { type: string; line?: string; result?: unknown; message?: string }

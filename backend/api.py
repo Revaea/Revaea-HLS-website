@@ -1,5 +1,6 @@
 from __future__ import annotations
-from quart import Blueprint, jsonify, current_app  # type: ignore
+import hmac
+from quart import Blueprint, jsonify, current_app, request  # type: ignore
 import time
 from .config import Config
 from .services.video import scan_and_convert_videos
@@ -11,6 +12,39 @@ bp = Blueprint('api', __name__)
 
 def get_cfg() -> Config:
     return current_app.config['APP_CONFIG']
+
+
+def _extract_bearer_token(auth_header: str | None) -> str | None:
+    if not auth_header:
+        return None
+    prefix = 'Bearer '
+    if auth_header.startswith(prefix):
+        token = auth_header[len(prefix):].strip()
+        return token or None
+    return None
+
+
+def _extract_scan_token_from_request() -> str | None:
+    token = _extract_bearer_token(request.headers.get('Authorization'))
+    if token:
+        return token
+    token = (request.headers.get('X-Scan-Token') or '').strip()
+    if token:
+        return token
+    token = (request.args.get('token') or '').strip()
+    return token or None
+
+
+def _check_scan_auth():
+    cfg = get_cfg()
+    if not cfg.SCAN_AUTH_REQUIRED:
+        return None
+    if not cfg.SCAN_API_TOKEN:
+        return jsonify({'error': 'scan auth is enabled but SCAN_API_TOKEN is not configured'}), 503
+    provided = _extract_scan_token_from_request()
+    if not provided or not hmac.compare_digest(provided, cfg.SCAN_API_TOKEN):
+        return jsonify({'error': 'unauthorized'}), 401
+    return None
 
 
 @bp.get('/health')
@@ -36,6 +70,10 @@ async def get_video_playlist():
 
 @bp.post('/scan/video')
 async def scan_video():
+    denied = _check_scan_auth()
+    if denied is not None:
+        return denied
+
     cfg = get_cfg()
     app = current_app
     lock = app.scan_locks['video']
@@ -79,6 +117,10 @@ async def get_music_playlist():
 
 @bp.post('/scan/music')
 async def scan_music():
+    denied = _check_scan_auth()
+    if denied is not None:
+        return denied
+
     cfg = get_cfg()
     app = current_app
     lock = app.scan_locks['music']
