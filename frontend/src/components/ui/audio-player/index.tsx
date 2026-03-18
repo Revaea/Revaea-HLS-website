@@ -2,7 +2,7 @@
 import Hls from 'hls.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Pause, Play, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react'
+import { Loader2, Pause, Play, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react'
 import ProgressBar from './ProgressBar'
 import VolumePopover from './VolumePopover'
 import ModeButton from './ModeButton'
@@ -27,6 +27,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [ready, setReady] = useState(false)
   const [playing, setPlaying] = useState(false)
+  const [buffering, setBuffering] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(NaN)
   const [seeking, setSeeking] = useState(false)
@@ -38,6 +39,8 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
   const [showVol, setShowVol] = useState(false)
   const volWrapRef = useRef<HTMLDivElement | null>(null)
   const wasPlayingRef = useRef(false)
+  // 当曲目结束触发切歌后，用这个标志让下一首在 canplay 时自动开始播放。
+  const pendingAutoPlayRef = useRef(false)
 
   useEffect(() => { seekingRef.current = seeking }, [seeking])
 
@@ -52,8 +55,11 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
     if (!el) return
 
     let hls: Hls | null = null
+    // 若 props 要求自动播放，或上一首结束触发了“自动下一首”，都在 canplay 时尝试 play()
+    pendingAutoPlayRef.current = pendingAutoPlayRef.current || !!autoPlay
     setReady(false)
     setPlaying(false)
+    setBuffering(true)
     setCurrent(0)
     setDuration(NaN)
     setBufferedEnd(0)
@@ -73,9 +79,18 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       }
       const onPlay = () => setPlaying(true)
       const onPause = () => setPlaying(false)
-      const onCanPlay = () => setReady(true)
+      const onCanPlay = () => {
+        setReady(true)
+        setBuffering(false)
+        if (pendingAutoPlayRef.current) {
+          pendingAutoPlayRef.current = false
+          el.play().catch(() => { /* require user gesture */ })
+        }
+      }
+      const onWaiting = () => setBuffering(true)
+      const onPlaying = () => setBuffering(false)
       const onVolume = () => { setMuted(el.muted); setVolume(el.volume) }
-      const onEnded = () => setPlaying(false)
+      const onEnded = () => { setPlaying(false); setBuffering(false) }
 
       el.addEventListener('loadedmetadata', onLoadedMeta)
       el.addEventListener('timeupdate', onTimeUpdate)
@@ -83,6 +98,9 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       el.addEventListener('play', onPlay)
       el.addEventListener('pause', onPause)
       el.addEventListener('canplay', onCanPlay)
+      el.addEventListener('waiting', onWaiting)
+      el.addEventListener('stalled', onWaiting)
+      el.addEventListener('playing', onPlaying)
       el.addEventListener('volumechange', onVolume)
       el.addEventListener('ended', onEnded)
 
@@ -93,6 +111,9 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
         el.removeEventListener('play', onPlay)
         el.removeEventListener('pause', onPause)
         el.removeEventListener('canplay', onCanPlay)
+        el.removeEventListener('waiting', onWaiting)
+        el.removeEventListener('stalled', onWaiting)
+        el.removeEventListener('playing', onPlaying)
         el.removeEventListener('volumechange', onVolume)
         el.removeEventListener('ended', onEnded)
       }
@@ -112,10 +133,6 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       el.load()
     }
 
-    if (autoPlay) {
-      el.play().catch(() => { /* require user gesture */ })
-    }
-
     return () => {
       if (hls) hls.destroy()
       detachListeners()
@@ -131,7 +148,9 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
     if (!el) return
     const handle = () => {
       if (mode === 'one') return
-      onNext?.(mode)
+      if (!onNext) return
+      pendingAutoPlayRef.current = true
+      onNext(mode)
     }
     el.addEventListener('ended', handle)
     return () => el.removeEventListener('ended', handle)
@@ -153,7 +172,11 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
     if (playing) {
       el.pause()
     } else {
-      el.play().catch(() => { /* 需用户手势或资源未就绪时忽略错误 */ })
+      setBuffering(true)
+      el.play().catch(() => {
+        // 需用户手势或资源未就绪时忽略错误
+        setBuffering(false)
+      })
     }
   }
 
@@ -200,6 +223,23 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
     seekingRef.current = false
     setSeekValuePct(null)
     if (wasPlayingRef.current) {
+      const el = audioRef.current
+      // 如果快进到未缓冲区域，提前触发缓冲态（避免必须等到 waiting 事件才出现 UI）。
+      if (el) {
+        try {
+          let hit = false
+          const ranges = el.buffered
+          for (let i = 0; i < ranges.length; i++) {
+            if (targetTime >= ranges.start(i) && targetTime <= ranges.end(i) - 0.05) {
+              hit = true
+              break
+            }
+          }
+          if (!hit) setBuffering(true)
+        } catch {
+          // ignore
+        }
+      }
       audioRef.current?.play().catch(() => { /* ignore autoplay restrictions */ })
     }
     wasPlayingRef.current = false
@@ -236,6 +276,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       onKeyDown={onKeyDown}
       role="region"
       aria-label="音频播放器"
+      aria-busy={buffering ? 'true' : 'false'}
     >
       {/* controls row */}
       <div className="flex items-center gap-2">
@@ -246,7 +287,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
           aria-label={playing ? '暂停' : '播放'}
           disabled={!ready}
         >
-          {playing ? <Pause size={16} /> : <Play size={16} />}
+          {buffering && !playing ? <Loader2 size={16} className="animate-spin" /> : playing ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <button
           type="button"
@@ -313,6 +354,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       onKeyDown={onKeyDown}
       role="region"
       aria-label="音频播放器（精简）"
+      aria-busy={buffering ? 'true' : 'false'}
     >
       <div className="flex items-center gap-2">
         {/* 播放/暂停按钮 */}
@@ -321,8 +363,9 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
           onClick={togglePlay}
           className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-slate-300/70 dark:border-slate-700/60 bg-white/80 dark:bg-slate-900/70 text-slate-900 dark:text-slate-100 hover:bg-white/90 dark:hover:bg-slate-900/80 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           aria-label={playing ? '暂停' : '播放'}
+          disabled={!ready}
         >
-          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {buffering && !playing ? <Loader2 size={14} className="animate-spin" /> : playing ? <Pause size={14} /> : <Play size={14} />}
         </button>
         {/* 时间 */}
         <div className="text-[11px] sm:text-xs tabular-nums text-slate-900/90 dark:text-slate-200/90 min-w-[44px] text-right">{formatTime(current)}</div>

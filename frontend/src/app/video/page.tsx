@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Window } from '@/components/ui/window'
 import { Skeleton } from '@/components/ui/skeleton'
 import ScanTokenInput from '@/components/ScanTokenInput'
-import { Play, RefreshCw, History, X } from 'lucide-react'
+import { Loader2, Play, RefreshCw, History, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 type Track = { id: string; artist?: string; title?: string; originalFile?: string; hlsUrl?: string; hasHLS?: boolean; format?: string }
@@ -23,6 +23,7 @@ export default function VideoPage() {
   const leftRef = useRef<HTMLDivElement | null>(null)
   const rightRef = useRef<HTMLDivElement | null>(null)
   const [videoReady, setVideoReady] = useState(false)
+  const [autoPlayNext, setAutoPlayNext] = useState(false)
 
   const load = async () => {
     setListLoading(true)
@@ -59,6 +60,12 @@ export default function VideoPage() {
     if (!list.length) return
     const cur = indexById.get(selectedId || '') ?? 0
     gotoByIndex(cur + 1)
+  }
+
+  const handleEnded = () => {
+    // 当前视频播放完毕 -> 切到下一条，并尝试自动播放下一条
+    setAutoPlayNext(true)
+    handleNext()
   }
 
   useEffect(() => {
@@ -222,11 +229,27 @@ export default function VideoPage() {
                   </div>
                   <div className="p-4">
                     {selected.hlsUrl ? (
-                      <div className={`relative w-full aspect-video overflow-hidden rounded-sm bg-black transition-all duration-500 ease-out ${videoReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+                      <div
+                        className="relative w-full aspect-video overflow-hidden rounded-sm bg-black"
+                        aria-busy={videoReady ? 'false' : 'true'}
+                      >
+                        {!videoReady && (
+                          <div className="absolute inset-0 grid place-items-center">
+                            <div className="flex flex-col items-center gap-2 text-slate-200">
+                              <Loader2 size={28} className="animate-spin" />
+                              <div className="text-sm">缓冲中…</div>
+                            </div>
+                          </div>
+                        )}
                         <HlsVideo
                           src={toBackendUrl(selected.hlsUrl)}
-                          className="absolute inset-0 w-full h-full block !m-0 object-contain object-center"
-                          onCanPlay={() => setVideoReady(true)}
+                          className={`absolute inset-0 w-full h-full block !m-0 object-contain object-center transition-opacity duration-300 ${videoReady ? 'opacity-100' : 'opacity-0'}`}
+                          onCanPlay={() => {
+                            setVideoReady(true)
+                            if (autoPlayNext) setAutoPlayNext(false)
+                          }}
+                          onEnded={handleEnded}
+                          autoPlay={autoPlayNext}
                         />
                       </div>
                     ) : (
