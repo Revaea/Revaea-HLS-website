@@ -16,6 +16,7 @@ export interface AudioPlayerProps {
   autoPlay?: boolean
   onPrev?: (mode: PlayMode) => void
   onNext?: (mode: PlayMode) => void
+  onError?: (message: string) => void
   variant?: 'full' | 'compact'
   mode?: PlayMode
   onModeChange?: (mode: PlayMode) => void
@@ -23,8 +24,9 @@ export interface AudioPlayerProps {
 
 export type PlayMode = 'all' | 'one' | 'shuffle'
 
-export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant = 'full', mode: modeProp, onModeChange }: AudioPlayerProps) {
+export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError, variant = 'full', mode: modeProp, onModeChange }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const onErrorRef = useRef<((message: string) => void) | undefined>(undefined)
   const [ready, setReady] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [buffering, setBuffering] = useState(false)
@@ -43,6 +45,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
   const pendingAutoPlayRef = useRef(false)
 
   useEffect(() => { seekingRef.current = seeking }, [seeking])
+  useEffect(() => { onErrorRef.current = onError }, [onError])
 
   const [internalMode, setInternalMode] = useState<PlayMode>('all')
   const mode = modeProp ?? internalMode
@@ -91,6 +94,20 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       const onPlaying = () => setBuffering(false)
       const onVolume = () => { setMuted(el.muted); setVolume(el.volume) }
       const onEnded = () => { setPlaying(false); setBuffering(false) }
+      const onMediaError = () => {
+        // 避免卡在“缓冲中”，并给外部一个机会提示错误。
+        setReady(false)
+        setPlaying(false)
+        setBuffering(false)
+        pendingAutoPlayRef.current = false
+        try {
+          const code = el.error?.code
+          const msg = code ? `audio error code=${code}` : 'audio error'
+          onErrorRef.current?.(msg)
+        } catch {
+          // noop
+        }
+      }
 
       el.addEventListener('loadedmetadata', onLoadedMeta)
       el.addEventListener('timeupdate', onTimeUpdate)
@@ -103,6 +120,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       el.addEventListener('playing', onPlaying)
       el.addEventListener('volumechange', onVolume)
       el.addEventListener('ended', onEnded)
+      el.addEventListener('error', onMediaError)
 
       return () => {
         el.removeEventListener('loadedmetadata', onLoadedMeta)
@@ -116,6 +134,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
         el.removeEventListener('playing', onPlaying)
         el.removeEventListener('volumechange', onVolume)
         el.removeEventListener('ended', onEnded)
+        el.removeEventListener('error', onMediaError)
       }
     }
 
@@ -128,6 +147,16 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
       hls = new Hls({ enableWorker: true })
       hls.loadSource(src)
       hls.attachMedia(el)
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        if (!data) return
+        if (data.fatal) {
+          setReady(false)
+          setPlaying(false)
+          setBuffering(false)
+          pendingAutoPlayRef.current = false
+          try { onErrorRef.current?.(`hls fatal error: ${data.type || 'unknown'}`) } catch { /* noop */ }
+        }
+      })
     } else {
       el.src = src
       el.load()
@@ -136,6 +165,13 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, variant 
     return () => {
       if (hls) hls.destroy()
       detachListeners()
+      try {
+        el.pause()
+        el.removeAttribute('src')
+        el.load()
+      } catch {
+        // ignore
+      }
     }
   }, [src, autoPlay])
 

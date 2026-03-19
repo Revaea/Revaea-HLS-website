@@ -23,6 +23,7 @@ export default function MusicPage() {
   const hasLogs = logs.length > 0
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [playMode, setPlayMode] = useState<PlayMode>('all')
+  const [isLg, setIsLg] = useState(false)
   const leftRef = useRef<HTMLDivElement | null>(null)
   const rightRef = useRef<HTMLDivElement | null>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
@@ -110,6 +111,21 @@ export default function MusicPage() {
       window.clearTimeout(id)
     }
   }, [selectedId, list.length, playMode])
+
+  useEffect(() => {
+    const mq = typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)') : undefined
+    if (!mq) return
+    const apply = () => setIsLg(!!mq.matches)
+    apply()
+    try {
+      mq.addEventListener('change', apply)
+      return () => mq.removeEventListener('change', apply)
+    } catch {
+      // Safari < 14 fallback
+      mq.addListener(apply)
+      return () => mq.removeListener(apply)
+    }
+  }, [])
 
   useEffect(() => {
     const el = imgRef.current
@@ -267,23 +283,13 @@ export default function MusicPage() {
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white/80 via-white/40 to-transparent dark:from-black/70 dark:via-black/35 dark:to-transparent hidden lg:block" />
                       {selected.hlsUrl ? (
                         <>
-                          <div className="absolute inset-x-0 bottom-0 p-2 lg:hidden">
+                          <div className="absolute inset-x-0 bottom-0 p-2">
                             <AudioPlayer
                               src={toBackendUrl(selected.hlsUrl)}
                               className="bg-transparent dark:bg-transparent border-0 shadow-none rounded-none"
                               onPrev={handlePrev}
                               onNext={handleNext}
-                              variant="compact"
-                              mode={playMode}
-                              onModeChange={setPlayMode}
-                            />
-                          </div>
-                          <div className="absolute inset-x-0 bottom-0 p-2 hidden lg:block">
-                            <AudioPlayer
-                              src={toBackendUrl(selected.hlsUrl)}
-                              className="bg-transparent dark:bg-transparent border-0 shadow-none rounded-none"
-                              onPrev={handlePrev}
-                              onNext={handleNext}
+                              variant={isLg ? 'full' : 'compact'}
                               mode={playMode}
                               onModeChange={setPlayMode}
                             />
