@@ -122,6 +122,9 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
       el.addEventListener('ended', onEnded)
       el.addEventListener('error', onMediaError)
 
+      // 浏览器可能会恢复上次音量/静音状态；立即同步一次，避免 UI 初始显示不准。
+      onVolume()
+
       return () => {
         el.removeEventListener('loadedmetadata', onLoadedMeta)
         el.removeEventListener('timeupdate', onTimeUpdate)

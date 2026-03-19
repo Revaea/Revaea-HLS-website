@@ -110,7 +110,7 @@ export default function MusicPage() {
       window.removeEventListener('resize', apply)
       window.clearTimeout(id)
     }
-  }, [selectedId, list.length, playMode])
+  }, [selectedId, list.length])
 
   useEffect(() => {
     const mq = typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)') : undefined
@@ -289,6 +289,7 @@ export default function MusicPage() {
                               className="bg-transparent dark:bg-transparent border-0 shadow-none rounded-none"
                               onPrev={handlePrev}
                               onNext={handleNext}
+                              onError={(msg) => toast.error(`音乐播放失败：${msg}`)}
                               variant={isLg ? 'full' : 'compact'}
                               mode={playMode}
                               onModeChange={setPlayMode}
