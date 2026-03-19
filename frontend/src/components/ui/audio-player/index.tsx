@@ -68,6 +68,18 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
     setBufferedEnd(0)
 
     const attachListeners = () => {
+      const isTimeBuffered = (t: number) => {
+        try {
+          const ranges = el.buffered
+          for (let i = 0; i < ranges.length; i++) {
+            if (t >= ranges.start(i) && t <= ranges.end(i) - 0.05) return true
+          }
+        } catch {
+          // ignore
+        }
+        return false
+      }
+
       const onLoadedMeta = () => { setDuration(el.duration) }
       const onTimeUpdate = () => {
         if (seekingRef.current) return
@@ -79,9 +91,19 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
           const end = b.length ? b.end(b.length - 1) : 0
           setBufferedEnd(end)
         } catch { /* ignore */ }
+
+        // 若因 seek 到未缓冲区域而进入缓冲态，暂停状态下也应在缓冲完成后自动解除。
+        // （playing 状态由 waiting/playing 事件驱动即可，不在这里干预）
+        if (el.paused && buffering) {
+          if (isTimeBuffered(el.currentTime)) setBuffering(false)
+        }
       }
       const onPlay = () => setPlaying(true)
-      const onPause = () => setPlaying(false)
+      const onPause = () => {
+        setPlaying(false)
+        // 暂停时不应长期停留在“缓冲中”视觉状态。
+        setBuffering(false)
+      }
       const onCanPlay = () => {
         setReady(true)
         setBuffering(false)
@@ -90,7 +112,12 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
           el.play().catch(() => { /* require user gesture */ })
         }
       }
-      const onWaiting = () => setBuffering(true)
+      const onWaiting = () => {
+        // 断点切换/布局变化可能触发 waiting/stalled，但如果当前是暂停态且不打算自动播放，
+        // 不应展示“缓冲中”。
+        if (el.paused && !pendingAutoPlayRef.current) return
+        setBuffering(true)
+      }
       const onPlaying = () => setBuffering(false)
       const onVolume = () => { setMuted(el.muted); setVolume(el.volume) }
       const onEnded = () => { setPlaying(false); setBuffering(false) }
@@ -261,9 +288,10 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
     setSeeking(false)
     seekingRef.current = false
     setSeekValuePct(null)
-    if (wasPlayingRef.current) {
+
+    // 如果快进到未缓冲区域，提前触发缓冲态（避免必须等到 waiting 事件才出现 UI）。
+    {
       const el = audioRef.current
-      // 如果快进到未缓冲区域，提前触发缓冲态（避免必须等到 waiting 事件才出现 UI）。
       if (el) {
         try {
           let hit = false
@@ -275,10 +303,14 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
             }
           }
           if (!hit) setBuffering(true)
+          else setBuffering(false)
         } catch {
           // ignore
         }
       }
+    }
+
+    if (wasPlayingRef.current) {
       audioRef.current?.play().catch(() => { /* ignore autoplay restrictions */ })
     }
     wasPlayingRef.current = false
@@ -326,7 +358,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
           aria-label={playing ? '暂停' : '播放'}
           disabled={!ready}
         >
-          {buffering && !playing ? <Loader2 size={16} className="animate-spin" /> : playing ? <Pause size={16} /> : <Play size={16} />}
+          {buffering ? <Loader2 size={16} className="animate-spin" /> : playing ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <button
           type="button"
@@ -404,7 +436,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
           aria-label={playing ? '暂停' : '播放'}
           disabled={!ready}
         >
-          {buffering && !playing ? <Loader2 size={14} className="animate-spin" /> : playing ? <Pause size={14} /> : <Play size={14} />}
+          {buffering ? <Loader2 size={14} className="animate-spin" /> : playing ? <Pause size={14} /> : <Play size={14} />}
         </button>
         {/* 时间 */}
         <div className="text-[11px] sm:text-xs tabular-nums text-slate-900/90 dark:text-slate-200/90 min-w-[44px] text-right">{formatTime(current)}</div>
@@ -420,21 +452,19 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
               max={100}
               step={0.1}
               value={sliderValue}
-              onMouseDown={(e) => {
+              onMouseDown={() => {
                 seekingRef.current = true
                 setSeeking(true)
                 wasPlayingRef.current = playing
                 if (playing) audioRef.current?.pause()
-                const v = parseFloat((e.currentTarget as HTMLInputElement).value)
-                setSeekValuePct(Number.isFinite(v) ? v : progress)
+                setSeekValuePct(progress)
               }}
-              onTouchStart={(e) => {
+              onTouchStart={() => {
                 seekingRef.current = true
                 setSeeking(true)
                 wasPlayingRef.current = playing
                 if (playing) audioRef.current?.pause()
-                const v = parseFloat((e.currentTarget as HTMLInputElement).value)
-                setSeekValuePct(Number.isFinite(v) ? v : progress)
+                setSeekValuePct(progress)
               }}
               onChange={(e) => { if (!ready) return; setSeekValuePct(parseFloat(e.target.value)) }}
               onMouseUp={() => commitSeek(seekValuePct)}
