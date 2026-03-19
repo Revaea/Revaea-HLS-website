@@ -52,8 +52,14 @@ export function ProgressBar({
           onSeekStart?.(Number.isFinite(v) ? v : valuePct)
         }}
         onChange={(e) => onSeekChange?.(parseFloat(e.currentTarget.value))}
-        onMouseUp={() => onSeekCommit?.(valuePct)}
-        onTouchEnd={() => onSeekCommit?.(valuePct)}
+        onMouseUp={(e) => {
+          const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+          onSeekCommit?.(Number.isFinite(v) ? v : null)
+        }}
+        onTouchEnd={(e) => {
+          const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+          onSeekCommit?.(Number.isFinite(v) ? v : null)
+        }}
         className={cn(
           'absolute inset-0 w-full h-full appearance-none bg-transparent touch-none focus:outline-none',
           '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:outline-none [&::-webkit-slider-thumb]:shadow-none [&::-webkit-slider-thumb]:transition-none',
