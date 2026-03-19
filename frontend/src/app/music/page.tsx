@@ -26,8 +26,20 @@ export default function MusicPage() {
   const [isLg, setIsLg] = useState(false)
   const leftRef = useRef<HTMLDivElement | null>(null)
   const rightRef = useRef<HTMLDivElement | null>(null)
-  const imgRef = useRef<HTMLImageElement | null>(null)
   const [imgLoaded, setImgLoaded] = useState(false)
+  const scanWsRef = useRef<WebSocket | null>(null)
+
+  useEffect(() => {
+    return () => {
+      try {
+        scanWsRef.current?.close()
+      } catch {
+        // ignore
+      } finally {
+        scanWsRef.current = null
+      }
+    }
+  }, [])
 
   const load = async () => {
     setListLoading(true)
@@ -127,25 +139,44 @@ export default function MusicPage() {
     }
   }, [])
 
-  useEffect(() => {
-    const el = imgRef.current
-    if (el && el.complete && el.naturalWidth > 0) setImgLoaded(true)
-  }, [selectedId])
-
   const scan = async () => {
     setLoading(true)
     setLogs([])
-    let ws: WebSocket | null = null
+
+    // 避免重复扫描或页面切换遗留连接。
     try {
-      ws = openScanWS('/ws/scan/music', {
+      scanWsRef.current?.close()
+    } catch {
+      // ignore
+    } finally {
+      scanWsRef.current = null
+    }
+
+    try {
+      const ws = openScanWS('/ws/scan/music', {
         onLog: (line) => setLogs(prev => [...prev, line].slice(-500)),
         onDone: async () => {
+          try {
+            scanWsRef.current?.close()
+          } catch {
+            // ignore
+          } finally {
+            scanWsRef.current = null
+          }
           await load()
           toast.success('音乐扫描完成')
           setLoading(false)
         },
         onError: (msg) => {
           setLogs(prev => [...prev, `ERROR: ${msg}`])
+
+          try {
+            scanWsRef.current?.close()
+          } catch {
+            // ignore
+          } finally {
+            scanWsRef.current = null
+          }
 
           if (/already running/i.test(msg)) {
             toast.error('有一个音乐扫描正在进行中，请稍后再试')
@@ -158,8 +189,9 @@ export default function MusicPage() {
           }
           setLoading(false)
         },
-        onClose: () => { if (ws) ws = null }
+        onClose: () => { scanWsRef.current = null }
       })
+      scanWsRef.current = ws
     } catch {
 
       try {

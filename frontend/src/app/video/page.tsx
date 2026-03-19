@@ -25,6 +25,19 @@ export default function VideoPage() {
   const [videoReady, setVideoReady] = useState(false)
   const [autoPlayNext, setAutoPlayNext] = useState(false)
   const [videoError, setVideoError] = useState<string | null>(null)
+  const scanWsRef = useRef<WebSocket | null>(null)
+
+  useEffect(() => {
+    return () => {
+      try {
+        scanWsRef.current?.close()
+      } catch {
+        // ignore
+      } finally {
+        scanWsRef.current = null
+      }
+    }
+  }, [])
 
   const load = async () => {
     setListLoading(true)
@@ -115,17 +128,42 @@ export default function VideoPage() {
   const scan = async () => {
     setLoading(true)
     setLogs([])
-    let ws: WebSocket | null = null
+
+    // 避免重复扫描或页面切换遗留连接。
     try {
-      ws = openScanWS('/ws/scan/video', {
+      scanWsRef.current?.close()
+    } catch {
+      // ignore
+    } finally {
+      scanWsRef.current = null
+    }
+
+    try {
+      const ws = openScanWS('/ws/scan/video', {
         onLog: (line) => setLogs(prev => [...prev, line].slice(-500)),
         onDone: async () => {
+          try {
+            scanWsRef.current?.close()
+          } catch {
+            // ignore
+          } finally {
+            scanWsRef.current = null
+          }
           await load()
           toast.success('视频扫描完成')
           setLoading(false)
         },
         onError: (msg) => {
           setLogs(prev => [...prev, `ERROR: ${msg}`])
+
+          try {
+            scanWsRef.current?.close()
+          } catch {
+            // ignore
+          } finally {
+            scanWsRef.current = null
+          }
+
           if (/already running/i.test(msg)) {
             toast.error('有一个视频扫描正在进行中，请稍后再试')
           } else if (/debounced/i.test(msg)) {
@@ -137,8 +175,9 @@ export default function VideoPage() {
           }
           setLoading(false)
         },
-        onClose: () => { if (ws) ws = null }
+        onClose: () => { scanWsRef.current = null }
       })
+      scanWsRef.current = ws
     } catch {
       try {
         const data = await postJSON<{ logs?: string[]; result?: unknown }>('/api/scan/video', undefined, { headers: getScanAuthHeaders() })
