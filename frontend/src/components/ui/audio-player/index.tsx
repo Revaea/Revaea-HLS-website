@@ -30,6 +30,8 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
   const [ready, setReady] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [buffering, setBuffering] = useState(false)
+  const bufferingRef = useRef(false)
+  const lastTimeUpdateMsRef = useRef(0)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(NaN)
   const [seeking, setSeeking] = useState(false)
@@ -46,6 +48,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
 
   useEffect(() => { seekingRef.current = seeking }, [seeking])
   useEffect(() => { onErrorRef.current = onError }, [onError])
+  useEffect(() => { bufferingRef.current = buffering }, [buffering])
 
   const [internalMode, setInternalMode] = useState<PlayMode>('all')
   const mode = modeProp ?? internalMode
@@ -84,8 +87,9 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
       const onTimeUpdate = () => {
         if (seekingRef.current) return
         setCurrent(el.currentTime)
+        lastTimeUpdateMsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
         // 一旦时间在推进，说明并未处于“等待数据”的停滞状态；清掉可能残留的缓冲态。
-        if (buffering) setBuffering(false)
+        if (bufferingRef.current) setBuffering(false)
       }
       const onProgress = () => {
         try {
@@ -96,7 +100,7 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
 
         // 若因 seek 到未缓冲区域而进入缓冲态，暂停状态下也应在缓冲完成后自动解除。
         // （playing 状态由 waiting/playing 事件驱动即可，不在这里干预）
-        if (el.paused && buffering) {
+        if (el.paused && bufferingRef.current) {
           if (isTimeBuffered(el.currentTime)) setBuffering(false)
         }
       }
@@ -115,6 +119,10 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
         }
       }
       const onWaiting = () => {
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+        // 断点切换/布局变化可能触发 waiting/stalled；若最近仍有 timeupdate（播放在推进），
+        // 说明并未真正卡顿，忽略该事件。
+        if (now - lastTimeUpdateMsRef.current < 350) return
         // 断点切换/布局变化可能触发 waiting/stalled，但如果当前是暂停态且不打算自动播放，
         // 不应展示“缓冲中”。
         if (el.paused && !pendingAutoPlayRef.current) return
