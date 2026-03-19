@@ -84,6 +84,8 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
       const onTimeUpdate = () => {
         if (seekingRef.current) return
         setCurrent(el.currentTime)
+        // 一旦时间在推进，说明并未处于“等待数据”的停滞状态；清掉可能残留的缓冲态。
+        if (buffering) setBuffering(false)
       }
       const onProgress = () => {
         try {
@@ -452,23 +454,31 @@ export function AudioPlayer({ src, className, autoPlay, onPrev, onNext, onError,
               max={100}
               step={0.1}
               value={sliderValue}
-              onMouseDown={() => {
+              onMouseDown={(e) => {
                 seekingRef.current = true
                 setSeeking(true)
                 wasPlayingRef.current = playing
                 if (playing) audioRef.current?.pause()
-                setSeekValuePct(progress)
+                const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+                setSeekValuePct(Number.isFinite(v) ? v : progress)
               }}
-              onTouchStart={() => {
+              onTouchStart={(e) => {
                 seekingRef.current = true
                 setSeeking(true)
                 wasPlayingRef.current = playing
                 if (playing) audioRef.current?.pause()
-                setSeekValuePct(progress)
+                const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+                setSeekValuePct(Number.isFinite(v) ? v : progress)
               }}
               onChange={(e) => { if (!ready) return; setSeekValuePct(parseFloat(e.target.value)) }}
-              onMouseUp={() => commitSeek(seekValuePct)}
-              onTouchEnd={() => commitSeek(seekValuePct)}
+              onMouseUp={(e) => {
+                const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+                commitSeek(Number.isFinite(v) ? v : null)
+              }}
+              onTouchEnd={(e) => {
+                const v = parseFloat((e.currentTarget as HTMLInputElement).value)
+                commitSeek(Number.isFinite(v) ? v : null)
+              }}
               className={cn(
                 'absolute inset-0 w-full h-full appearance-none bg-transparent touch-none focus:outline-none',
                 '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-600 [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:outline-none [&::-webkit-slider-thumb]:shadow-none [&::-webkit-slider-thumb]:transition-none',
