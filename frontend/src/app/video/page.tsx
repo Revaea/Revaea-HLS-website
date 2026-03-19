@@ -24,6 +24,7 @@ export default function VideoPage() {
   const rightRef = useRef<HTMLDivElement | null>(null)
   const [videoReady, setVideoReady] = useState(false)
   const [autoPlayNext, setAutoPlayNext] = useState(false)
+  const [videoError, setVideoError] = useState<string | null>(null)
 
   const load = async () => {
     setListLoading(true)
@@ -40,15 +41,30 @@ export default function VideoPage() {
   useEffect(() => {
     if (!list.length) { setSelectedId(null); return }
     if (!selectedId || !list.some(i => i.id === selectedId)) {
+      // 列表刷新/首屏自动选中：不要遗留“自动播放下一条”的标志。
+      setAutoPlayNext(false)
       setSelectedId(list[0].id)
     }
   }, [list, selectedId])
   const selected = useMemo(() => list.find(i => i.id === selectedId) || null, [list, selectedId])
-  useEffect(() => { setVideoReady(false) }, [selectedId])
+  const selectedSrc = useMemo(() => (selected?.hlsUrl ? toBackendUrl(selected.hlsUrl) : ''), [selected?.hlsUrl])
+
+  useEffect(() => {
+    // 只要播放源变化（包括同 ID 的 URL 更新），就重置播放状态。
+    setVideoReady(false)
+    setVideoError(null)
+    // 如果当前条目没有 HLS，不应保留任何“自动播放下一条”的残留标志。
+    if (!selectedSrc) setAutoPlayNext(false)
+  }, [selectedSrc])
+
   const indexById = useMemo(() => new Map(list.map((t, idx) => [t.id, idx])), [list])
-  const gotoByIndex = (idx: number) => {
+  const gotoByIndex = (idx: number, opts?: { keepAutoPlay?: boolean }) => {
     if (!list.length) return
     const n = ((idx % list.length) + list.length) % list.length
+    // 切换条目时同步重置 UI（避免闪烁/错判 ready），并在非“自动下一条”场景清掉自动播放标志。
+    setVideoReady(false)
+    setVideoError(null)
+    if (!opts?.keepAutoPlay) setAutoPlayNext(false)
     setSelectedId(list[n].id)
   }
   const handlePrev = () => {
@@ -65,7 +81,9 @@ export default function VideoPage() {
   const handleEnded = () => {
     // 当前视频播放完毕 -> 切到下一条，并尝试自动播放下一条
     setAutoPlayNext(true)
-    handleNext()
+    if (!list.length) return
+    const cur = indexById.get(selectedId || '') ?? 0
+    gotoByIndex(cur + 1, { keepAutoPlay: true })
   }
 
   useEffect(() => {
@@ -209,7 +227,7 @@ export default function VideoPage() {
                   return (
                     <li key={item.id}>
                       <button
-                        onClick={() => setSelectedId(item.id)}
+                        onClick={() => gotoByIndex(indexById.get(item.id) ?? 0)}
                         className={`w-full text-left px-4 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors ${active ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'}`}
                       >
                         <div className="text-sm font-medium truncate text-slate-900 dark:text-slate-100">{item.title || item.id}</div>
@@ -228,25 +246,39 @@ export default function VideoPage() {
                     <div className="text-slate-600 dark:text-slate-300 sm:ml-2 truncate">{selected.artist || '—'}</div>
                   </div>
                   <div className="p-4">
-                    {selected.hlsUrl ? (
+                    {selectedSrc ? (
                       <div
                         className="relative w-full aspect-video overflow-hidden rounded-sm bg-black"
-                        aria-busy={videoReady ? 'false' : 'true'}
+                        aria-busy={!videoReady && !videoError ? 'true' : 'false'}
                       >
-                        {!videoReady && (
+                        {(!videoReady || !!videoError) && (
                           <div className="absolute inset-0 grid place-items-center">
-                            <div className="flex flex-col items-center gap-2 text-slate-200">
-                              <Loader2 size={28} className="animate-spin" />
-                              <div className="text-sm">缓冲中…</div>
-                            </div>
+                            {videoError ? (
+                              <div className="flex flex-col items-center gap-2 text-slate-200 text-center px-4">
+                                <div className="text-sm font-medium">播放失败</div>
+                                <div className="text-xs text-slate-300 break-all">{videoError}</div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-2 text-slate-200">
+                                <Loader2 size={28} className="animate-spin" />
+                                <div className="text-sm">缓冲中…</div>
+                              </div>
+                            )}
                           </div>
                         )}
                         <HlsVideo
-                          src={toBackendUrl(selected.hlsUrl)}
+                          src={selectedSrc}
                           className={`absolute inset-0 w-full h-full block !m-0 object-contain object-center transition-opacity duration-300 ${videoReady ? 'opacity-100' : 'opacity-0'}`}
                           onCanPlay={() => {
                             setVideoReady(true)
+                            setVideoError(null)
                             if (autoPlayNext) setAutoPlayNext(false)
+                          }}
+                          onError={(msg) => {
+                            setVideoReady(true)
+                            setAutoPlayNext(false)
+                            setVideoError(msg)
+                            toast.error('视频播放失败')
                           }}
                           onEnded={handleEnded}
                           autoPlay={autoPlayNext}
